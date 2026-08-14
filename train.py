@@ -39,24 +39,28 @@ train_features, train_labels = next(iter(train_dataloader))
 
 # print(train_features.shape)
 # print(train_labels.shape)
-
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.flatten = nn.Flatten()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
 
-        self.layers = nn.Sequential(
-            nn.Linear(28 * 28, 512),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 10)
+            nn.MaxPool2d(2)
         )
 
+        self.flatten = nn.Flatten()
+
+        self.classifier = nn.Linear(32 * 7 * 7, 10)
+
     def forward(self, x):
+        x = self.features(x)
         x = self.flatten(x)
-        logits = self.layers(x)
+        logits = self.classifier(x)
         return logits
 
 model = NeuralNetwork()
@@ -127,6 +131,8 @@ def test(dataloader, model, loss_fn):
     correct /= size
 
     print(f"Test accuracy: {100 * correct:.1f}%")
+
+print(model)
 
 epochs = 5
 
