@@ -1,9 +1,10 @@
+import io
 import os
 
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -16,6 +17,10 @@ from torchvision.models import resnet18
 
 IMAGE_SIZE = 384
 BATCH_SIZE = 8
+SEED = 42
+
+torch.manual_seed(SEED)
+np.random.seed(SEED)
 
 test_csv = (
     "data/idrid/B. Disease Grading/"
@@ -34,14 +39,13 @@ model_path = "best_model.pth"
 
 # ============================================================
 # CROP BLACK BACKGROUND
-# Same logic used in baseline training
+# Same preprocessing used for baseline
 # ============================================================
 
 def crop_retina(image):
     array = np.array(image)
 
     gray = array.mean(axis=2)
-
     mask = gray > 10
 
     rows = np.where(mask.any(axis=1))[0]
@@ -61,6 +65,84 @@ def crop_retina(image):
 
 
 # ============================================================
+# JPEG COMPRESSION
+# ============================================================
+
+def apply_jpeg_compression(image, quality):
+    """
+    Re-encode an image as JPEG in memory.
+
+    Lower quality = stronger compression.
+    """
+
+    buffer = io.BytesIO()
+
+    image.save(
+        buffer,
+        format="JPEG",
+        quality=quality
+    )
+
+    buffer.seek(0)
+
+    compressed = Image.open(
+        buffer
+    ).convert("RGB")
+
+    # Copy image so it no longer depends on the buffer
+    compressed = compressed.copy()
+
+    buffer.close()
+
+    return compressed
+
+
+# ============================================================
+# GAUSSIAN NOISE
+# ============================================================
+
+def apply_gaussian_noise(
+    image,
+    noise_std,
+    seed
+):
+    """
+    Add zero-mean Gaussian noise.
+
+    noise_std is measured on the usual 0-255 pixel scale.
+    """
+
+    if noise_std <= 0:
+        return image
+
+    array = np.array(
+        image,
+        dtype=np.float32
+    )
+
+    rng = np.random.default_rng(seed)
+
+    noise = rng.normal(
+        loc=0.0,
+        scale=noise_std,
+        size=array.shape
+    )
+
+    noisy = array + noise
+
+    noisy = np.clip(
+        noisy,
+        0,
+        255
+    ).astype(np.uint8)
+
+    return Image.fromarray(
+        noisy,
+        mode="RGB"
+    )
+
+
+# ============================================================
 # DATASET
 # ============================================================
 
@@ -70,12 +152,21 @@ class IDRiDRobustnessDataset(Dataset):
         csv_file,
         image_dir,
         transform=None,
-        blur_radius=0
+        blur_radius=0,
+        brightness=1.0,
+        contrast=1.0,
+        noise_std=0.0,
+        jpeg_quality=100
     ):
         self.labels = pd.read_csv(csv_file)
         self.image_dir = image_dir
         self.transform = transform
+
         self.blur_radius = blur_radius
+        self.brightness = brightness
+        self.contrast = contrast
+        self.noise_std = noise_std
+        self.jpeg_quality = jpeg_quality
 
     def __len__(self):
         return len(self.labels)
@@ -84,7 +175,9 @@ class IDRiDRobustnessDataset(Dataset):
         row = self.labels.iloc[idx]
 
         image_name = row["Image name"]
-        label = int(row["Retinopathy grade"])
+        label = int(
+            row["Retinopathy grade"]
+        )
 
         image_path = os.path.join(
             self.image_dir,
@@ -95,15 +188,20 @@ class IDRiDRobustnessDataset(Dataset):
             image_path
         ).convert("RGB")
 
-        # 1. Same retinal crop as baseline
+        # ----------------------------------------
+        # Baseline preprocessing
+        # ----------------------------------------
+
         image = crop_retina(image)
 
-        # 2. Resize to exact model input size
         image = image.resize(
             (IMAGE_SIZE, IMAGE_SIZE)
         )
 
-        # 3. Apply corruption AFTER resizing
+        # ----------------------------------------
+        # Gaussian blur
+        # ----------------------------------------
+
         if self.blur_radius > 0:
             image = image.filter(
                 ImageFilter.GaussianBlur(
@@ -111,7 +209,56 @@ class IDRiDRobustnessDataset(Dataset):
                 )
             )
 
-        # 4. Convert to tensor + normalize
+        # ----------------------------------------
+        # Brightness
+        # ----------------------------------------
+
+        if self.brightness != 1.0:
+            image = ImageEnhance.Brightness(
+                image
+            ).enhance(
+                self.brightness
+            )
+
+        # ----------------------------------------
+        # Contrast
+        # ----------------------------------------
+
+        if self.contrast != 1.0:
+            image = ImageEnhance.Contrast(
+                image
+            ).enhance(
+                self.contrast
+            )
+
+        # ----------------------------------------
+        # Gaussian noise
+        # ----------------------------------------
+
+        if self.noise_std > 0:
+            image = apply_gaussian_noise(
+                image,
+                self.noise_std,
+
+                # Fixed per-image noise so repeated
+                # evaluations are reproducible
+                seed=SEED + idx
+            )
+
+        # ----------------------------------------
+        # JPEG compression
+        # ----------------------------------------
+
+        if self.jpeg_quality < 100:
+            image = apply_jpeg_compression(
+                image,
+                self.jpeg_quality
+            )
+
+        # ----------------------------------------
+        # Tensor + normalization
+        # ----------------------------------------
+
         if self.transform:
             image = self.transform(image)
 
@@ -120,7 +267,6 @@ class IDRiDRobustnessDataset(Dataset):
 
 # ============================================================
 # TRANSFORM
-# Resize already happened above
 # ============================================================
 
 transform = transforms.Compose([
@@ -134,7 +280,7 @@ transform = transforms.Compose([
 
 
 # ============================================================
-# LOAD SAVED BASELINE MODEL
+# LOAD BASELINE MODEL
 # ============================================================
 
 model = resnet18(
@@ -157,15 +303,26 @@ model.eval()
 
 
 # ============================================================
-# EVALUATION FUNCTION
+# EVALUATION
 # ============================================================
 
-def evaluate(blur_radius):
+def evaluate(
+    blur_radius=0,
+    brightness=1.0,
+    contrast=1.0,
+    noise_std=0.0,
+    jpeg_quality=100
+):
     dataset = IDRiDRobustnessDataset(
         test_csv,
         test_image_dir,
         transform=transform,
-        blur_radius=blur_radius
+
+        blur_radius=blur_radius,
+        brightness=brightness,
+        contrast=contrast,
+        noise_std=noise_std,
+        jpeg_quality=jpeg_quality
     )
 
     dataloader = DataLoader(
@@ -214,7 +371,47 @@ def evaluate(blur_radius):
 
 
 # ============================================================
-# BLUR EXPERIMENT
+# CLEAN BASELINE
+# ============================================================
+
+clean_accuracy, clean_confusion = evaluate()
+
+print("\n========================================")
+print("CLEAN BASELINE")
+print("========================================")
+
+print(
+    f"Accuracy: "
+    f"{100 * clean_accuracy:.1f}%"
+)
+
+print("\nConfusion matrix:")
+print(clean_confusion)
+
+
+# ============================================================
+# HELPER FOR PRINTING RESULTS
+# ============================================================
+
+def print_result(
+    name,
+    level,
+    accuracy
+):
+    drop = (
+        clean_accuracy
+        - accuracy
+    )
+
+    print(
+        f"{name} {level}: "
+        f"{100 * accuracy:.1f}% "
+        f"(drop: {100 * drop:.1f} points)"
+    )
+
+
+# ============================================================
+# 1. GAUSSIAN BLUR
 # ============================================================
 
 blur_levels = [
@@ -226,64 +423,229 @@ blur_levels = [
     8
 ]
 
+print("\n========================================")
+print("GAUSSIAN BLUR")
+print("========================================")
 
-print("\nGaussian Blur Robustness")
-print("------------------------")
+for level in blur_levels:
 
-
-clean_accuracy = None
-
-results = []
-
-
-for blur in blur_levels:
-
-    accuracy, confusion = evaluate(
-        blur
+    accuracy, _ = evaluate(
+        blur_radius=level
     )
 
-    if blur == 0:
-        clean_accuracy = accuracy
-
-    drop = (
-        clean_accuracy
-        - accuracy
-    )
-
-    results.append(
-        (
-            blur,
-            accuracy,
-            drop
-        )
-    )
-
-    print(
-        f"Blur radius {blur}: "
-        f"{100 * accuracy:.1f}% "
-        f"(drop: {100 * drop:.1f} points)"
+    print_result(
+        "Radius",
+        level,
+        accuracy
     )
 
 
 # ============================================================
-# CLEAN CONFUSION MATRIX
+# 2. BRIGHTNESS
 # ============================================================
 
-clean_accuracy, clean_confusion = evaluate(
-    0
+brightness_levels = [
+    0.25,
+    0.50,
+    0.75,
+    1.0,
+    1.25,
+    1.50,
+    1.75
+]
+
+print("\n========================================")
+print("BRIGHTNESS")
+print("========================================")
+
+for level in brightness_levels:
+
+    accuracy, _ = evaluate(
+        brightness=level
+    )
+
+    print_result(
+        "Factor",
+        level,
+        accuracy
+    )
+
+
+# ============================================================
+# 3. CONTRAST
+# ============================================================
+
+contrast_levels = [
+    0.25,
+    0.50,
+    0.75,
+    1.0,
+    1.25,
+    1.50,
+    2.0
+]
+
+print("\n========================================")
+print("CONTRAST")
+print("========================================")
+
+for level in contrast_levels:
+
+    accuracy, _ = evaluate(
+        contrast=level
+    )
+
+    print_result(
+        "Factor",
+        level,
+        accuracy
+    )
+
+
+# ============================================================
+# 4. GAUSSIAN NOISE
+# ============================================================
+
+noise_levels = [
+    0,
+    5,
+    10,
+    20,
+    30,
+    50
+]
+
+print("\n========================================")
+print("GAUSSIAN NOISE")
+print("========================================")
+
+print(
+    "Noise std is measured on the "
+    "0-255 pixel-value scale."
 )
 
-print("\nClean confusion matrix:")
-print(clean_confusion)
+for level in noise_levels:
+
+    accuracy, _ = evaluate(
+        noise_std=level
+    )
+
+    print_result(
+        "Std",
+        level,
+        accuracy
+    )
 
 
 # ============================================================
-# STRONG BLUR CONFUSION MATRIX
+# 5. JPEG COMPRESSION
 # ============================================================
 
-strong_blur_accuracy, strong_blur_confusion = evaluate(
-    8
+jpeg_levels = [
+    100,
+    90,
+    70,
+    50,
+    30,
+    10
+]
+
+print("\n========================================")
+print("JPEG COMPRESSION")
+print("========================================")
+
+print(
+    "Lower JPEG quality means "
+    "stronger compression."
 )
 
-print("\nBlur radius 8 confusion matrix:")
-print(strong_blur_confusion)
+for level in jpeg_levels:
+
+    accuracy, _ = evaluate(
+        jpeg_quality=level
+    )
+
+    print_result(
+        "Quality",
+        level,
+        accuracy
+    )
+
+
+# ============================================================
+# EXTREME FAILURE CONFUSION MATRICES
+# ============================================================
+
+print("\n========================================")
+print("SELECTED EXTREME CONFUSION MATRICES")
+print("========================================")
+
+
+# Strong blur
+_, blur_confusion = evaluate(
+    blur_radius=8
+)
+
+print(
+    "\nGaussian blur radius 8:"
+)
+
+print(
+    blur_confusion
+)
+
+
+# Very dark
+_, dark_confusion = evaluate(
+    brightness=0.25
+)
+
+print(
+    "\nBrightness factor 0.25:"
+)
+
+print(
+    dark_confusion
+)
+
+
+# Very low contrast
+_, contrast_confusion = evaluate(
+    contrast=0.25
+)
+
+print(
+    "\nContrast factor 0.25:"
+)
+
+print(
+    contrast_confusion
+)
+
+
+# Strong Gaussian noise
+_, noise_confusion = evaluate(
+    noise_std=50
+)
+
+print(
+    "\nGaussian noise std 50:"
+)
+
+print(
+    noise_confusion
+)
+
+
+# Heavy JPEG compression
+_, jpeg_confusion = evaluate(
+    jpeg_quality=10
+)
+
+print(
+    "\nJPEG quality 10:"
+)
+
+print(
+    jpeg_confusion
+)
