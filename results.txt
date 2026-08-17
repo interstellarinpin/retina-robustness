@@ -1,96 +1,114 @@
-ROBUST TRAINING RESULTS
-=======================
+FINAL CONTROLLED ROBUSTNESS RESULTS
+===================================
 
-Full training class counts:
-Retinopathy grade
-0    134
-1     20
-2    136
-3     74
-4     49
+Configuration
+-------------
+Baseline model:
+- ResNet-18
+- Image size: 384 x 384
+- Batch size: 8
+- Clean training
 
-Training split:
-0    107
-1     16
-2    109
-3     59
-4     39
+Robust model:
+- ResNet-18
+- Image size: 384 x 384
+- Batch size: 8
+- Corruption-aware training
 
-Validation split:
-0    27
-1     4
-2    27
-3    15
-4    10
-
-Best validation accuracy: 71.1%
-
-Clean test accuracy reported during training: 54.4%
-
-Per-class recall:
-Grade 0: 55.9%
-Grade 1: 0.0%
-Grade 2: 75.0%
-Grade 3: 42.1%
-Grade 4: 38.5%
-
-
-FINAL ROBUSTNESS BENCHMARK
-==========================
-
-Clean:
-Baseline: 60.2%
+Clean test performance
+----------------------
+Baseline: 55.3%
 Robust:   53.4%
-Change:   -6.8 points
+Change:   -1.9 percentage points
 
 
 GAUSSIAN BLUR
+=============
+
 Severity    Baseline    Robust    Change
-0           60.2%       53.4%     -6.8
-0.5         60.2%       53.4%     -6.8
-1           57.3%       48.5%     -8.7
-2           42.7%       50.5%     +7.8
-4           16.5%       31.1%     +14.6
-8           12.6%       17.5%     +4.9
+0           55.3%       53.4%     -1.9
+0.5         53.4%       53.4%      0.0
+1           47.6%       48.5%     +1.0
+2           41.7%       50.5%     +8.7
+4           15.5%       31.1%    +15.5
+8           13.6%       17.5%     +3.9
 
 
 BRIGHTNESS
+==========
+
 Severity    Baseline    Robust    Change
-0.25        43.7%       54.4%     +10.7
-0.5         58.3%       55.3%     -2.9
-0.75        59.2%       56.3%     -2.9
-1.0         60.2%       53.4%     -6.8
-1.25        60.2%       56.3%     -3.9
-1.5         55.3%       51.5%     -3.9
-1.75        44.7%       48.5%     +3.9
+0.25        38.8%       54.4%    +15.5
+0.50        54.4%       55.3%     +1.0
+0.75        57.3%       56.3%     -1.0
+1.00        55.3%       53.4%     -1.9
+1.25        55.3%       56.3%     +1.0
+1.50        53.4%       51.5%     -1.9
+1.75        47.6%       48.5%     +1.0
 
 
 CONTRAST
+========
+
 Severity    Baseline    Robust    Change
-0.25        52.4%       58.3%     +5.8
-0.5         56.3%       54.4%     -1.9
-0.75        58.3%       57.3%     -1.0
-1.0         60.2%       53.4%     -6.8
-1.25        60.2%       53.4%     -6.8
-1.5         58.3%       49.5%     -8.7
-2.0         50.5%       43.7%     -6.8
+0.25        43.7%       58.3%    +14.6
+0.50        53.4%       54.4%     +1.0
+0.75        54.4%       57.3%     +2.9
+1.00        55.3%       53.4%     -1.9
+1.25        54.4%       53.4%     -1.0
+1.50        57.3%       49.5%     -7.8
+2.00        53.4%       43.7%     -9.7
 
 
 GAUSSIAN NOISE
+==============
+
 Severity    Baseline    Robust    Change
-0           60.2%       53.4%     -6.8
-5           49.5%       55.3%     +5.8
-10          21.4%       50.5%     +29.1
-20          12.6%       42.7%     +30.1
-30          12.6%       34.0%     +21.4
+0           55.3%       53.4%     -1.9
+5           47.6%       55.3%     +7.8
+10          23.3%       50.5%    +27.2
+20          16.5%       42.7%    +26.2
+30          17.5%       34.0%    +16.5
 50          12.6%       21.4%     +8.7
 
 
 JPEG COMPRESSION
+================
+
 Quality     Baseline    Robust    Change
-100         60.2%       53.4%     -6.8
-90          63.1%       58.3%     -4.9
-70          53.4%       53.4%      0.0
-50          47.6%       53.4%     +5.8
-30          36.9%       49.5%     +12.6
-10          14.6%       12.6%     -1.9
+100         55.3%       53.4%     -1.9
+90          58.3%       58.3%      0.0
+70          48.5%       53.4%     +4.9
+50          44.7%       53.4%     +8.7
+30          40.8%       49.5%     +8.7
+10          18.4%       12.6%     -5.8
+
+
+KEY FINDINGS
+============
+
+1. Corruption-aware training reduced clean accuracy only slightly:
+   55.3% -> 53.4% (-1.9 points).
+
+2. The strongest improvement occurred under Gaussian noise:
+   - std 10: 23.3% -> 50.5% (+27.2 points)
+   - std 20: 16.5% -> 42.7% (+26.2 points)
+
+3. Robust training substantially improved performance under strong blur:
+   - radius 4: 15.5% -> 31.1% (+15.5 points)
+
+4. Robust training improved performance under extreme darkness:
+   - brightness 0.25: 38.8% -> 54.4% (+15.5 points)
+
+5. Robust training improved low-contrast performance:
+   - contrast 0.25: 43.7% -> 58.3% (+14.6 points)
+
+6. Moderate JPEG compression also improved:
+   - quality 50: 44.7% -> 53.4% (+8.7 points)
+   - quality 30: 40.8% -> 49.5% (+8.7 points)
+
+7. Improvements were not universal.
+   Robust training performed worse under:
+   - high contrast
+   - extreme JPEG compression
+   - some clean/mild conditions

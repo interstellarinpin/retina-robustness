@@ -11,13 +11,9 @@ from torchvision import transforms
 from torchvision.models import resnet18, ResNet18_Weights
 
 
-# ============================================================
-# SETTINGS
-# ============================================================
-
 SEED = 42
-BATCH_SIZE = 4
-IMAGE_SIZE = 320
+BATCH_SIZE = 8
+IMAGE_SIZE = 384
 EPOCHS = 15
 LEARNING_RATE = 1e-4
 VALIDATION_FRACTION = 0.20
@@ -26,10 +22,6 @@ torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 
-
-# ============================================================
-# FILE PATHS
-# ============================================================
 
 train_csv = (
     "data/idrid/B. Disease Grading/"
@@ -95,9 +87,6 @@ def crop_retina(image):
     return image.crop((left, top, right + 1, bottom + 1))
 
 
-# ============================================================
-# CUSTOM DATASET
-# ============================================================
 
 class IDRiDDataset(Dataset):
     def __init__(
@@ -135,10 +124,6 @@ class IDRiDDataset(Dataset):
         return image, label
 
 
-# ============================================================
-# TRANSFORMS
-# ============================================================
-
 # Training images get mild augmentation
 train_transform = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
@@ -164,7 +149,7 @@ train_transform = transforms.Compose([
 ])
 
 
-# Validation/test images should NOT be randomly augmented
+
 evaluation_transform = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
 
@@ -177,9 +162,6 @@ evaluation_transform = transforms.Compose([
 ])
 
 
-# ============================================================
-# READ TRAINING LABELS
-# ============================================================
 
 all_train_labels = pd.read_csv(train_csv)
 
@@ -190,10 +172,6 @@ print(
     ].value_counts().sort_index()
 )
 
-
-# ============================================================
-# STRATIFIED TRAIN / VALIDATION SPLIT
-# ============================================================
 
 train_parts = []
 validation_parts = []
@@ -257,16 +235,10 @@ print(
 )
 
 
-# ============================================================
-# OFFICIAL TEST DATA
-# ============================================================
-
 test_dataframe = pd.read_csv(test_csv)
 
 
-# ============================================================
-# CREATE DATASETS
-# ============================================================
+
 
 train_dataset = IDRiDDataset(
     train_dataframe,
@@ -287,10 +259,6 @@ test_dataset = IDRiDDataset(
 )
 
 
-# ============================================================
-# DATALOADERS
-# ============================================================
-
 train_dataloader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
@@ -310,9 +278,7 @@ test_dataloader = DataLoader(
 )
 
 
-# ============================================================
-# RESNET-18
-# ============================================================
+
 
 weights = ResNet18_Weights.DEFAULT
 
@@ -327,13 +293,6 @@ model.fc = nn.Linear(
     5
 )
 
-# We are fine-tuning EVERYTHING.
-# Nothing is frozen.
-
-
-# ============================================================
-# LOSS + OPTIMIZER
-# ============================================================
 
 # Ordinary cross entropy because your current goal
 # is overall classification accuracy.
@@ -346,9 +305,7 @@ optimizer = torch.optim.AdamW(
 )
 
 
-# ============================================================
-# TRAINING
-# ============================================================
+
 
 def train(
     dataloader,
@@ -400,11 +357,6 @@ def train(
     )
 
     return average_loss, accuracy
-
-
-# ============================================================
-# EVALUATION
-# ============================================================
 
 def evaluate(
     dataloader,
@@ -474,9 +426,7 @@ def evaluate(
     )
 
 
-# ============================================================
-# TRAIN AND SAVE BEST VALIDATION MODEL
-# ============================================================
+
 
 best_validation_accuracy = 0
 
@@ -549,9 +499,6 @@ for epoch in range(EPOCHS):
         )
 
 
-# ============================================================
-# LOAD BEST MODEL
-# ============================================================
 
 model.load_state_dict(
     torch.load(
@@ -578,9 +525,7 @@ print(
 )
 
 
-# ============================================================
-# FINAL OFFICIAL TEST
-# ============================================================
+
 
 (
     test_loss,
@@ -615,9 +560,7 @@ print(
 )
 
 
-# ============================================================
-# PER-CLASS RECALL
-# ============================================================
+
 
 print(
     "\nPer-class recall:"
