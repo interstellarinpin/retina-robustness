@@ -1,5 +1,6 @@
 import io
 import os
+import random
 
 import numpy as np
 import pandas as pd
@@ -8,19 +9,36 @@ from PIL import Image, ImageEnhance, ImageFilter
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
-from torchvision.models import resnet18
+from torchvision.models import resnet18, ResNet18_Weights
 
 
 # ============================================================
 # SETTINGS
 # ============================================================
 
-IMAGE_SIZE = 384
-BATCH_SIZE = 8
 SEED = 42
+BATCH_SIZE = 8
+IMAGE_SIZE = 384
+EPOCHS = 15
+LEARNING_RATE = 1e-4
+VALIDATION_FRACTION = 0.20
 
-BASELINE_MODEL_PATH = "best_model.pth"
-ROBUST_MODEL_PATH = "best_robust_model.pth"
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
+
+
+train_csv = (
+    "data/idrid/B. Disease Grading/"
+    "2. Groundtruths/"
+    "a. IDRiD_Disease Grading_Training Labels.csv"
+)
+
+train_image_dir = (
+    "data/idrid/B. Disease Grading/"
+    "1. Original Images/"
+    "a. Training Set"
+)
 
 test_csv = (
     "data/idrid/B. Disease Grading/"
@@ -34,18 +52,16 @@ test_image_dir = (
     "b. Testing Set"
 )
 
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
 
 # ============================================================
-# RETINA CROP
+# CROP BLACK BACKGROUND
 # ============================================================
 
 def crop_retina(image):
     array = np.array(image)
 
     gray = array.mean(axis=2)
+
     mask = gray > 10
 
     rows = np.where(mask.any(axis=1))[0]
@@ -54,104 +70,152 @@ def crop_retina(image):
     if len(rows) == 0 or len(cols) == 0:
         return image
 
+    top = rows[0]
+    bottom = rows[-1]
+    left = cols[0]
+    right = cols[-1]
+
     return image.crop(
-        (
-            cols[0],
-            rows[0],
-            cols[-1] + 1,
-            rows[-1] + 1
+        (left, top, right + 1, bottom + 1)
+    )
+
+
+# ============================================================
+# RANDOM GAUSSIAN NOISE
+# ============================================================
+
+class RandomGaussianNoise:
+    def __init__(
+        self,
+        p=0.30,
+        max_std=15.0
+    ):
+        self.p = p
+        self.max_std = max_std
+
+    def __call__(self, image):
+        if random.random() > self.p:
+            return image
+
+        array = np.array(
+            image,
+            dtype=np.float32
         )
-    )
+
+        noise_std = random.uniform(
+            0,
+            self.max_std
+        )
+
+        noise = np.random.normal(
+            loc=0.0,
+            scale=noise_std,
+            size=array.shape
+        )
+
+        noisy = array + noise
+
+        noisy = np.clip(
+            noisy,
+            0,
+            255
+        ).astype(np.uint8)
+
+        return Image.fromarray(
+            noisy,
+            mode="RGB"
+        )
 
 
 # ============================================================
-# GAUSSIAN NOISE
+# RANDOM JPEG COMPRESSION
 # ============================================================
 
-def apply_gaussian_noise(image, noise_std, seed):
-    if noise_std <= 0:
-        return image
+class RandomJPEGCompression:
+    def __init__(
+        self,
+        p=0.30,
+        min_quality=40,
+        max_quality=100
+    ):
+        self.p = p
+        self.min_quality = min_quality
+        self.max_quality = max_quality
 
-    array = np.array(
-        image,
-        dtype=np.float32
-    )
+    def __call__(self, image):
+        if random.random() > self.p:
+            return image
 
-    rng = np.random.default_rng(seed)
+        quality = random.randint(
+            self.min_quality,
+            self.max_quality
+        )
 
-    noise = rng.normal(
-        0,
-        noise_std,
-        size=array.shape
-    )
+        buffer = io.BytesIO()
 
-    array = np.clip(
-        array + noise,
-        0,
-        255
-    ).astype(np.uint8)
+        image.save(
+            buffer,
+            format="JPEG",
+            quality=quality
+        )
 
-    return Image.fromarray(array)
+        buffer.seek(0)
+
+        compressed = Image.open(
+            buffer
+        ).convert("RGB").copy()
+
+        buffer.close()
+
+        return compressed
 
 
 # ============================================================
-# JPEG COMPRESSION
+# RANDOM GAUSSIAN BLUR
 # ============================================================
 
-def apply_jpeg_compression(image, quality):
-    if quality >= 100:
-        return image
+class RandomGaussianBlur:
+    def __init__(
+        self,
+        p=0.30,
+        max_radius=2.0
+    ):
+        self.p = p
+        self.max_radius = max_radius
 
-    buffer = io.BytesIO()
+    def __call__(self, image):
+        if random.random() > self.p:
+            return image
 
-    image.save(
-        buffer,
-        format="JPEG",
-        quality=quality
-    )
+        radius = random.uniform(
+            0,
+            self.max_radius
+        )
 
-    buffer.seek(0)
-
-    image = Image.open(
-        buffer
-    ).convert("RGB").copy()
-
-    buffer.close()
-
-    return image
+        return image.filter(
+            ImageFilter.GaussianBlur(
+                radius=radius
+            )
+        )
 
 
 # ============================================================
 # DATASET
 # ============================================================
 
-class RobustnessDataset(Dataset):
+class IDRiDDataset(Dataset):
     def __init__(
         self,
-        csv_file,
+        dataframe,
         image_dir,
-        blur_radius=0,
-        brightness=1.0,
-        contrast=1.0,
-        noise_std=0.0,
-        jpeg_quality=100
+        transform=None
     ):
-        self.labels = pd.read_csv(csv_file)
+        self.labels = dataframe.reset_index(
+            drop=True
+        )
+
         self.image_dir = image_dir
-
-        self.blur_radius = blur_radius
-        self.brightness = brightness
-        self.contrast = contrast
-        self.noise_std = noise_std
-        self.jpeg_quality = jpeg_quality
-
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]
-            )
-        ])
+        self.transform = transform
 
     def __len__(self):
         return len(self.labels)
@@ -160,7 +224,10 @@ class RobustnessDataset(Dataset):
         row = self.labels.iloc[idx]
 
         image_name = row["Image name"]
-        label = int(row["Retinopathy grade"])
+
+        label = int(
+            row["Retinopathy grade"]
+        )
 
         image_path = os.path.join(
             self.image_dir,
@@ -171,307 +238,557 @@ class RobustnessDataset(Dataset):
             image_path
         ).convert("RGB")
 
-        # Same preprocessing as training
         image = crop_retina(image)
 
-        image = image.resize(
-            (IMAGE_SIZE, IMAGE_SIZE)
-        )
-
-        # Apply one requested corruption setup
-        if self.blur_radius > 0:
-            image = image.filter(
-                ImageFilter.GaussianBlur(
-                    radius=self.blur_radius
-                )
-            )
-
-        if self.brightness != 1.0:
-            image = ImageEnhance.Brightness(
-                image
-            ).enhance(
-                self.brightness
-            )
-
-        if self.contrast != 1.0:
-            image = ImageEnhance.Contrast(
-                image
-            ).enhance(
-                self.contrast
-            )
-
-        if self.noise_std > 0:
-            image = apply_gaussian_noise(
-                image,
-                self.noise_std,
-                seed=SEED + idx
-            )
-
-        if self.jpeg_quality < 100:
-            image = apply_jpeg_compression(
-                image,
-                self.jpeg_quality
-            )
-
-        image = self.transform(image)
+        if self.transform:
+            image = self.transform(image)
 
         return image, label
 
 
 # ============================================================
-# LOAD MODEL
+# TRANSFORMS
 # ============================================================
 
-def load_model(path):
-    model = resnet18(
-        weights=None
+train_transform = transforms.Compose([
+
+    transforms.Resize(
+        (IMAGE_SIZE, IMAGE_SIZE)
+    ),
+
+    transforms.RandomHorizontalFlip(
+        p=0.5
+    ),
+
+    transforms.RandomRotation(
+        degrees=10
+    ),
+
+    # Ordinary mild appearance augmentation
+    transforms.ColorJitter(
+        brightness=0.15,
+        contrast=0.15,
+        saturation=0.05
+    ),
+
+    # Corruption-aware augmentation
+    RandomGaussianBlur(
+        p=0.30,
+        max_radius=2.0
+    ),
+
+    RandomGaussianNoise(
+        p=0.30,
+        max_std=15.0
+    ),
+
+    RandomJPEGCompression(
+        p=0.30,
+        min_quality=40,
+        max_quality=100
+    ),
+
+    transforms.ToTensor(),
+
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+
+
+evaluation_transform = transforms.Compose([
+
+    transforms.Resize(
+        (IMAGE_SIZE, IMAGE_SIZE)
+    ),
+
+    transforms.ToTensor(),
+
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+
+
+# ============================================================
+# TRAIN / VALIDATION SPLIT
+# ============================================================
+
+all_train_labels = pd.read_csv(
+    train_csv
+)
+
+print("\nFull training class counts:")
+
+print(
+    all_train_labels[
+        "Retinopathy grade"
+    ].value_counts().sort_index()
+)
+
+
+train_parts = []
+validation_parts = []
+
+
+for grade, group in all_train_labels.groupby(
+    "Retinopathy grade"
+):
+
+    group = group.sample(
+        frac=1,
+        random_state=SEED
     )
 
-    model.fc = nn.Linear(
-        model.fc.in_features,
-        5
-    )
-
-    model.load_state_dict(
-        torch.load(
-            path,
-            weights_only=True
+    validation_size = max(
+        1,
+        round(
+            len(group)
+            * VALIDATION_FRACTION
         )
     )
 
-    model.eval()
+    validation_group = group.iloc[
+        :validation_size
+    ]
 
-    return model
+    training_group = group.iloc[
+        validation_size:
+    ]
+
+    train_parts.append(
+        training_group
+    )
+
+    validation_parts.append(
+        validation_group
+    )
 
 
-baseline_model = load_model(
-    BASELINE_MODEL_PATH
+train_dataframe = pd.concat(
+    train_parts
+).sample(
+    frac=1,
+    random_state=SEED
+).reset_index(
+    drop=True
 )
 
-robust_model = load_model(
-    ROBUST_MODEL_PATH
+
+validation_dataframe = pd.concat(
+    validation_parts
+).sample(
+    frac=1,
+    random_state=SEED
+).reset_index(
+    drop=True
+)
+
+
+print("\nTraining split:")
+
+print(
+    train_dataframe[
+        "Retinopathy grade"
+    ].value_counts().sort_index()
+)
+
+
+print("\nValidation split:")
+
+print(
+    validation_dataframe[
+        "Retinopathy grade"
+    ].value_counts().sort_index()
+)
+
+
+test_dataframe = pd.read_csv(
+    test_csv
 )
 
 
 # ============================================================
-# EVALUATE BOTH MODELS IN ONE PASS
+# DATASETS
 # ============================================================
 
-def evaluate_both(
-    blur_radius=0,
-    brightness=1.0,
-    contrast=1.0,
-    noise_std=0.0,
-    jpeg_quality=100
+train_dataset = IDRiDDataset(
+    train_dataframe,
+    train_image_dir,
+    transform=train_transform
+)
+
+validation_dataset = IDRiDDataset(
+    validation_dataframe,
+    train_image_dir,
+    transform=evaluation_transform
+)
+
+test_dataset = IDRiDDataset(
+    test_dataframe,
+    test_image_dir,
+    transform=evaluation_transform
+)
+
+
+# ============================================================
+# DATALOADERS
+# ============================================================
+
+train_dataloader = DataLoader(
+    train_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True
+)
+
+validation_dataloader = DataLoader(
+    validation_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=False
+)
+
+test_dataloader = DataLoader(
+    test_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=False
+)
+
+
+# ============================================================
+# MODEL
+# ============================================================
+
+weights = ResNet18_Weights.DEFAULT
+
+model = resnet18(
+    weights=weights
+)
+
+model.fc = nn.Linear(
+    model.fc.in_features,
+    5
+)
+
+
+# ============================================================
+# LOSS + OPTIMIZER
+# ============================================================
+
+loss_fn = nn.CrossEntropyLoss()
+
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=LEARNING_RATE,
+    weight_decay=1e-4
+)
+
+
+# ============================================================
+# TRAIN
+# ============================================================
+
+def train(
+    dataloader,
+    model,
+    loss_fn,
+    optimizer
 ):
-    dataset = RobustnessDataset(
-        test_csv,
-        test_image_dir,
-        blur_radius=blur_radius,
-        brightness=brightness,
-        contrast=contrast,
-        noise_std=noise_std,
-        jpeg_quality=jpeg_quality
-    )
+    model.train()
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False
-    )
-
-    baseline_correct = 0
-    robust_correct = 0
+    total_loss = 0
+    correct = 0
     total = 0
 
+    for X, y in dataloader:
+
+        pred = model(X)
+
+        loss = loss_fn(
+            pred,
+            y
+        )
+
+        optimizer.zero_grad()
+
+        loss.backward()
+
+        optimizer.step()
+
+        total_loss += loss.item()
+
+        predicted_classes = pred.argmax(
+            dim=1
+        )
+
+        correct += (
+            predicted_classes == y
+        ).sum().item()
+
+        total += y.size(0)
+
+    average_loss = (
+        total_loss
+        / len(dataloader)
+    )
+
+    accuracy = (
+        correct / total
+    )
+
+    return average_loss, accuracy
+
+
+# ============================================================
+# EVALUATE
+# ============================================================
+
+def evaluate(
+    dataloader,
+    model,
+    loss_fn
+):
+    model.eval()
+
+    total_loss = 0
+    correct = 0
+    total = 0
+
+    confusion = torch.zeros(
+        5,
+        5,
+        dtype=torch.int64
+    )
+
     with torch.no_grad():
+
         for X, y in dataloader:
-            baseline_pred = baseline_model(
-                X
-            ).argmax(dim=1)
 
-            robust_pred = robust_model(
-                X
-            ).argmax(dim=1)
+            pred = model(X)
 
-            baseline_correct += (
-                baseline_pred == y
-            ).sum().item()
+            loss = loss_fn(
+                pred,
+                y
+            )
 
-            robust_correct += (
-                robust_pred == y
+            total_loss += loss.item()
+
+            predicted_classes = pred.argmax(
+                dim=1
+            )
+
+            correct += (
+                predicted_classes == y
             ).sum().item()
 
             total += y.size(0)
 
-    baseline_accuracy = (
-        baseline_correct / total
+            for true_label, predicted_label in zip(
+                y,
+                predicted_classes
+            ):
+
+                confusion[
+                    true_label.item(),
+                    predicted_label.item()
+                ] += 1
+
+    average_loss = (
+        total_loss
+        / len(dataloader)
     )
 
-    robust_accuracy = (
-        robust_correct / total
+    accuracy = (
+        correct / total
     )
 
     return (
-        baseline_accuracy,
-        robust_accuracy
+        average_loss,
+        accuracy,
+        confusion
     )
 
 
 # ============================================================
-# PRINTING HELPER
+# TRAINING LOOP
 # ============================================================
 
-def print_table(
-    title,
-    levels,
-    evaluator
-):
-    print("\n" + "=" * 72)
-    print(title)
-    print("=" * 72)
+best_validation_accuracy = 0
+
+best_model_path = (
+    "best_robust_model.pth"
+)
+
+
+for epoch in range(EPOCHS):
+
+    train_loss, train_accuracy = train(
+        train_dataloader,
+        model,
+        loss_fn,
+        optimizer
+    )
+
+    (
+        validation_loss,
+        validation_accuracy,
+        validation_confusion
+    ) = evaluate(
+        validation_dataloader,
+        model,
+        loss_fn
+    )
 
     print(
-        f"{'Severity':<16}"
-        f"{'Baseline':>12}"
-        f"{'Robust':>12}"
-        f"{'Δ Robust-BL':>16}"
+        f"\nEpoch {epoch + 1}/{EPOCHS}"
     )
 
-    print("-" * 72)
+    print(
+        f"Train loss: "
+        f"{train_loss:.4f}"
+    )
 
-    for level in levels:
-        baseline_acc, robust_acc = evaluator(
-            level
+    print(
+        f"Train accuracy: "
+        f"{100 * train_accuracy:.1f}%"
+    )
+
+    print(
+        f"Validation loss: "
+        f"{validation_loss:.4f}"
+    )
+
+    print(
+        f"Validation accuracy: "
+        f"{100 * validation_accuracy:.1f}%"
+    )
+
+    if (
+        validation_accuracy
+        > best_validation_accuracy
+    ):
+
+        best_validation_accuracy = (
+            validation_accuracy
         )
 
-        change = (
-            robust_acc
-            - baseline_acc
+        torch.save(
+            model.state_dict(),
+            best_model_path
         )
 
         print(
-            f"{str(level):<16}"
-            f"{100 * baseline_acc:>11.1f}%"
-            f"{100 * robust_acc:>11.1f}%"
-            f"{100 * change:>15.1f}"
+            "Saved new best robust model."
         )
 
 
 # ============================================================
-# CLEAN
+# LOAD BEST ROBUST MODEL
 # ============================================================
 
-baseline_clean, robust_clean = evaluate_both()
-
-print("\n" + "=" * 72)
-print("CLEAN TEST")
-print("=" * 72)
-
-print(
-    f"Baseline: {100 * baseline_clean:.1f}%"
+model.load_state_dict(
+    torch.load(
+        best_model_path,
+        weights_only=True
+    )
 )
 
+
 print(
-    f"Robust:   {100 * robust_clean:.1f}%"
+    "\n========================================"
 )
 
 print(
-    f"Change:   "
-    f"{100 * (robust_clean - baseline_clean):+.1f} points"
+    "BEST ROBUST VALIDATION ACCURACY"
+)
+
+print(
+    "========================================"
+)
+
+print(
+    f"{100 * best_validation_accuracy:.1f}%"
 )
 
 
 # ============================================================
-# BLUR
+# CLEAN TEST EVALUATION
 # ============================================================
 
-print_table(
-    "GAUSSIAN BLUR",
-    [0, 0.5, 1, 2, 4, 8],
-    lambda level: evaluate_both(
-        blur_radius=level
+(
+    test_loss,
+    test_accuracy,
+    test_confusion
+) = evaluate(
+    test_dataloader,
+    model,
+    loss_fn
+)
+
+
+print(
+    "\n========================================"
+)
+
+print(
+    "ROBUST MODEL — CLEAN TEST RESULTS"
+)
+
+print(
+    "========================================"
+)
+
+print(
+    f"Test loss: "
+    f"{test_loss:.4f}"
+)
+
+print(
+    f"Test accuracy: "
+    f"{100 * test_accuracy:.1f}%"
+)
+
+print(
+    "\nConfusion matrix:"
+)
+
+print(
+    test_confusion
+)
+
+
+print(
+    "\nPer-class recall:"
+)
+
+
+for grade in range(5):
+
+    total_for_grade = (
+        test_confusion[
+            grade
+        ].sum().item()
     )
-)
 
-
-# ============================================================
-# BRIGHTNESS
-# ============================================================
-
-print_table(
-    "BRIGHTNESS",
-    [
-        0.25,
-        0.50,
-        0.75,
-        1.0,
-        1.25,
-        1.50,
-        1.75
-    ],
-    lambda level: evaluate_both(
-        brightness=level
+    correct_for_grade = (
+        test_confusion[
+            grade,
+            grade
+        ].item()
     )
-)
 
+    if total_for_grade > 0:
 
-# ============================================================
-# CONTRAST
-# ============================================================
+        recall = (
+            correct_for_grade
+            / total_for_grade
+        )
 
-print_table(
-    "CONTRAST",
-    [
-        0.25,
-        0.50,
-        0.75,
-        1.0,
-        1.25,
-        1.50,
-        2.0
-    ],
-    lambda level: evaluate_both(
-        contrast=level
+    else:
+        recall = 0
+
+    print(
+        f"Grade {grade}: "
+        f"{100 * recall:.1f}%"
     )
-)
-
-
-# ============================================================
-# GAUSSIAN NOISE
-# ============================================================
-
-print_table(
-    "GAUSSIAN NOISE",
-    [
-        0,
-        5,
-        10,
-        20,
-        30,
-        50
-    ],
-    lambda level: evaluate_both(
-        noise_std=level
-    )
-)
-
-
-# ============================================================
-# JPEG COMPRESSION
-# ============================================================
-
-print_table(
-    "JPEG COMPRESSION",
-    [
-        100,
-        90,
-        70,
-        50,
-        30,
-        10
-    ],
-    lambda level: evaluate_both(
-        jpeg_quality=level
-    )
-)

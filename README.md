@@ -1,34 +1,31 @@
 # Retinal Image Robustness
 
-A study of how image corruptions affect deep-learning-based diabetic retinopathy classification and whether corruption-aware training can improve robustness.
+A study of how image degradation affects diabetic-retinopathy classification and whether corruption-aware training can improve robustness.
 
 ## Overview
 
-Deep learning models for medical imaging are usually evaluated on clean test images, but real-world images can be degraded by blur, noise, changes in illumination, contrast variation, or image compression.
+Deep-learning models for medical imaging are usually evaluated on clean test data, but real images may be affected by blur, sensor noise, illumination changes, contrast shifts, or image compression.
 
-This project investigates how these corruptions affect a ResNet-18 classifier trained to predict diabetic retinopathy severity from retinal fundus photographs.
+This project studies how these corruptions affect a retinal-image classifier trained on the IDRiD diabetic-retinopathy dataset.
 
-I first trained a baseline classifier on the IDRiD dataset and evaluated it under five types of image corruption:
+I trained two ImageNet-pretrained ResNet-18 models:
 
-- Gaussian blur
-- Brightness changes
-- Contrast changes
-- Gaussian noise
-- JPEG compression
+1. a **baseline model** using ordinary image augmentation;
+2. a **corruption-trained model** exposed during training to additional synthetic degradations.
 
-I then trained a second model using randomized corruption augmentation and evaluated both models under exactly the same corruption benchmark.
+Both models use the same architecture, image size, batch size, training/validation split, optimizer, and evaluation pipeline. The main experimental difference is the corruption-aware augmentation used by the robust model.
 
-The results show a tradeoff: corruption-aware training decreases clean accuracy but substantially improves robustness to several severe corruptions, particularly Gaussian noise, blur, and JPEG compression.
+The final experiment evaluates both fixed models on exactly the same corrupted versions of the official IDRiD test images.
 
 ---
 
 ## Dataset
 
-This project uses the **IDRiD (Indian Diabetic Retinopathy Image Dataset)** disease grading dataset.
+The project uses the **IDRiD disease-grading dataset**.
 
-The training set contains **413 retinal images** classified into five diabetic retinopathy grades:
+The original training set contains 413 retinal fundus images across five diabetic-retinopathy severity grades:
 
-| Grade | Training Images |
+| Grade | Images |
 |---|---:|
 | 0 | 134 |
 | 1 | 20 |
@@ -36,151 +33,181 @@ The training set contains **413 retinal images** classified into five diabetic r
 | 3 | 74 |
 | 4 | 49 |
 
-The strong class imbalance, particularly the small number of grade 1 examples, is an important limitation of the experiment.
+The dataset is strongly imbalanced, particularly for grade 1.
 
-Images are cropped to remove black background regions and resized to **384 × 384** before being passed to the model.
+The official training data is divided into a stratified training and validation split, while the official IDRiD test set is reserved for final evaluation.
+
+---
+
+## Model
+
+Both classifiers use an ImageNet-pretrained **ResNet-18**.
+
+The original 1000-class ImageNet output layer is replaced with a five-class classifier for diabetic-retinopathy severity.
+
+### Shared configuration
+
+- Architecture: ResNet-18
+- Input size: **384 × 384**
+- Batch size: **8**
+- Optimizer: AdamW
+- Learning rate: `1e-4`
+- Loss: cross-entropy
+- Epochs: 15
+- Model selection: best validation accuracy
+
+Before entering the network, retinal images are cropped to remove much of the black background and are normalized using ImageNet channel statistics.
 
 ---
 
 ## Baseline Model
 
-The classifier is based on an ImageNet-pretrained **ResNet-18** with its final classification layer replaced by a five-class output layer.
+The baseline training pipeline uses mild augmentation:
 
-The baseline model achieved:
+- horizontal flips
+- small rotations
+- small brightness changes
+- small contrast changes
+- small saturation changes
 
-**60.2% clean test accuracy**
+The selected baseline model achieved:
 
-Its clean-test confusion matrix showed substantial differences between classes, including difficulty recognizing the underrepresented grade 1 class.
+**55.3% clean test accuracy**
 
 ---
 
-## Robustness Benchmark
+## Corruption-Aware Model
 
-The baseline model was evaluated without retraining under progressively stronger image corruptions.
+The second model uses the same basic pipeline but receives additional randomized corruptions during training, including:
 
-### Gaussian Blur
+- Gaussian blur
+- Gaussian noise
+- JPEG compression
+- stronger appearance variation
+
+The purpose is to encourage the network to learn features that remain useful when image quality degrades.
+
+Its clean test accuracy was:
+
+**53.4%**
+
+This is only **1.9 percentage points lower** than the baseline.
+
+---
+
+# Robustness Results
+
+## Gaussian Blur
 
 ![Gaussian blur robustness](figures/gaussian_blur_robustness.png)
 
-Performance was relatively stable under very mild blur but collapsed as blur became stronger.
+| Blur Radius | Baseline | Robust | Change |
+|---:|---:|---:|---:|
+| 0 | 55.3% | 53.4% | -1.9 |
+| 0.5 | 53.4% | 53.4% | 0.0 |
+| 1 | 47.6% | 48.5% | +1.0 |
+| 2 | 41.7% | 50.5% | +8.7 |
+| 4 | 15.5% | 31.1% | **+15.5** |
+| 8 | 13.6% | 17.5% | +3.9 |
 
-| Blur Radius | Baseline Accuracy | Robust Accuracy |
-|---:|---:|---:|
-| 0 | 60.2% | 53.4% |
-| 0.5 | 60.2% | 53.4% |
-| 1 | 57.3% | 48.5% |
-| 2 | 42.7% | 50.5% |
-| 4 | 16.5% | 31.1% |
-| 8 | 12.6% | 17.5% |
+The baseline model becomes highly sensitive to stronger blur.
 
-At radius 4, corruption-aware training improved accuracy by **14.6 percentage points**.
+At blur radius 4, corruption-aware training improves accuracy from **15.5% to 31.1%**.
 
 ---
 
-### Gaussian Noise
+## Gaussian Noise
 
 ![Gaussian noise robustness](figures/gaussian_noise_robustness.png)
 
-Gaussian noise produced one of the most severe baseline failure modes.
+| Noise Std. | Baseline | Robust | Change |
+|---:|---:|---:|---:|
+| 0 | 55.3% | 53.4% | -1.9 |
+| 5 | 47.6% | 55.3% | +7.8 |
+| 10 | 23.3% | 50.5% | **+27.2** |
+| 20 | 16.5% | 42.7% | **+26.2** |
+| 30 | 17.5% | 34.0% | +16.5 |
+| 50 | 12.6% | 21.4% | +8.7 |
 
-| Noise Std. | Baseline Accuracy | Robust Accuracy |
-|---:|---:|---:|
-| 0 | 60.2% | 53.4% |
-| 5 | 49.5% | 55.3% |
-| 10 | 21.4% | 50.5% |
-| 20 | 12.6% | 42.7% |
-| 30 | 12.6% | 34.0% |
-| 50 | 12.6% | 21.4% |
+Gaussian noise produced the strongest robustness gains.
 
-At noise standard deviation 20, corruption-aware training improved accuracy from **12.6% to 42.7%**, a **30.1-point improvement**.
+At noise standard deviation 10, the robust model improves from **23.3% to 50.5%**.
+
+At standard deviation 20, accuracy improves from **16.5% to 42.7%**.
 
 ---
 
-### JPEG Compression
+## JPEG Compression
 
 ![JPEG compression robustness](figures/jpeg_compression_robustness.png)
 
-The baseline model also became increasingly unreliable as JPEG compression became stronger.
+| JPEG Quality | Baseline | Robust | Change |
+|---:|---:|---:|---:|
+| 100 | 55.3% | 53.4% | -1.9 |
+| 90 | 58.3% | 58.3% | 0.0 |
+| 70 | 48.5% | 53.4% | +4.9 |
+| 50 | 44.7% | 53.4% | +8.7 |
+| 30 | 40.8% | 49.5% | +8.7 |
+| 10 | 18.4% | 12.6% | -5.8 |
 
-| JPEG Quality | Baseline Accuracy | Robust Accuracy |
-|---:|---:|---:|
-| 100 | 60.2% | 53.4% |
-| 90 | 63.1% | 58.3% |
-| 70 | 53.4% | 53.4% |
-| 50 | 47.6% | 53.4% |
-| 30 | 36.9% | 49.5% |
-| 10 | 14.6% | 12.6% |
-
-At JPEG quality 30, robust training improved accuracy by **12.6 percentage points**.
-
-Very severe compression remained challenging for both models.
+The corruption-trained model improves robustness to moderate and heavy JPEG compression, although extremely severe compression remains difficult.
 
 ---
 
-## Brightness and Contrast
+## Brightness
 
-The models were also evaluated under brightness and contrast changes.
+| Brightness Factor | Baseline | Robust | Change |
+|---:|---:|---:|---:|
+| 0.25 | 38.8% | 54.4% | **+15.5** |
+| 0.50 | 54.4% | 55.3% | +1.0 |
+| 0.75 | 57.3% | 56.3% | -1.0 |
+| 1.00 | 55.3% | 53.4% | -1.9 |
+| 1.25 | 55.3% | 56.3% | +1.0 |
+| 1.50 | 53.4% | 51.5% | -1.9 |
+| 1.75 | 47.6% | 48.5% | +1.0 |
 
-The baseline model was comparatively tolerant to moderate brightness and contrast changes. Corruption-aware training did not consistently improve these conditions.
-
-Examples include:
-
-| Condition | Baseline | Robust | Change |
-|---|---:|---:|---:|
-| Brightness 0.25 | 43.7% | 54.4% | +10.7 |
-| Brightness 1.75 | 44.7% | 48.5% | +3.9 |
-| Contrast 0.25 | 52.4% | 58.3% | +5.8 |
-| Contrast 1.50 | 58.3% | 49.5% | -8.7 |
-
-This suggests that the benefits of corruption-aware training depend strongly on the type and severity of distribution shift.
+The largest brightness improvement occurs for very dark images.
 
 ---
 
-## Corruption-Aware Training
+## Contrast
 
-A second ResNet-18 was trained with randomized image degradations applied during training.
+| Contrast Factor | Baseline | Robust | Change |
+|---:|---:|---:|---:|
+| 0.25 | 43.7% | 58.3% | **+14.6** |
+| 0.50 | 53.4% | 54.4% | +1.0 |
+| 0.75 | 54.4% | 57.3% | +2.9 |
+| 1.00 | 55.3% | 53.4% | -1.9 |
+| 1.25 | 54.4% | 53.4% | -1.0 |
+| 1.50 | 57.3% | 49.5% | -7.8 |
+| 2.00 | 53.4% | 43.7% | -9.7 |
 
-The augmentation pipeline included mild-to-moderate:
-
-- Gaussian blur
-- Brightness variation
-- Contrast variation
-- Gaussian noise
-- JPEG compression
-
-The goal was not simply to train on the most extreme benchmark conditions, but to expose the model to realistic variation and test whether this generalized to stronger corruptions.
-
-### Clean-Accuracy Tradeoff
-
-The final benchmark produced:
-
-| Model | Clean Accuracy |
-|---|---:|
-| Baseline ResNet-18 | **60.2%** |
-| Corruption-trained ResNet-18 | **53.4%** |
-
-Corruption-aware training therefore reduced clean accuracy by **6.8 percentage points**.
-
-However, it substantially reduced degradation under several more severe corruptions.
+The robust model improves performance under low contrast but performs worse under unusually high contrast.
 
 ---
 
-## Key Results
+# Key Findings
 
-Some of the largest robustness improvements were:
+Corruption-aware training produced a favorable but non-universal robustness tradeoff.
+
+Clean accuracy changed only slightly:
+
+**55.3% → 53.4% (-1.9 points)**
+
+while several degraded conditions improved substantially:
 
 | Condition | Baseline | Robust | Improvement |
 |---|---:|---:|---:|
-| Gaussian noise, std 20 | 12.6% | 42.7% | **+30.1** |
-| Gaussian noise, std 10 | 21.4% | 50.5% | **+29.1** |
-| Gaussian noise, std 30 | 12.6% | 34.0% | **+21.4** |
-| Blur radius 4 | 16.5% | 31.1% | **+14.6** |
-| JPEG quality 30 | 36.9% | 49.5% | **+12.6** |
-| Brightness 0.25 | 43.7% | 54.4% | **+10.7** |
+| Noise std 10 | 23.3% | 50.5% | **+27.2** |
+| Noise std 20 | 16.5% | 42.7% | **+26.2** |
+| Blur radius 4 | 15.5% | 31.1% | **+15.5** |
+| Brightness 0.25 | 38.8% | 54.4% | **+15.5** |
+| Contrast 0.25 | 43.7% | 58.3% | **+14.6** |
+| JPEG quality 30 | 40.8% | 49.5% | **+8.7** |
 
-Overall, the experiment demonstrates a **clean-accuracy versus corruption-robustness tradeoff**.
+The strongest gains occurred under Gaussian noise.
 
-The corruption-trained model is not universally superior. It performs worse on clean images and under several mild corruptions, but it is substantially less brittle under several severe degradations.
+The experiment also shows that robustness training is not universally beneficial. High-contrast images and extremely compressed JPEG images sometimes performed worse.
 
 ---
 
@@ -199,39 +226,39 @@ retina-robustness/
 └── README.md
 ```
 
-- `dataset.py` — baseline IDRiD training pipeline
-- `train_robust.py` — corruption-aware training pipeline
-- `robustness.py` — side-by-side corruption benchmark
-- `results.txt` — final experimental results
-- `figures/` — robustness plots
+- `dataset.py` trains the baseline classifier and saves `best_model.pth`.
+- `train_robust.py` trains the corruption-aware classifier and saves `best_robust_model.pth`.
+- `robustness.py` loads both fixed models and evaluates them under identical corruption conditions.
+- `results.txt` stores the final numerical results.
+- `figures/` contains visualizations of the major robustness experiments.
 
-The IDRiD images and trained model checkpoints are excluded from the repository.
+The IDRiD image data and trained model checkpoints are excluded from version control.
 
 ---
 
 ## Limitations
 
-This is a small-scale robustness experiment rather than a clinically validated system.
+This project is an exploratory robustness study, not a clinically validated diagnostic system.
 
 Important limitations include:
 
-- The training dataset contains only **413 images**.
-- The class distribution is highly imbalanced.
-- Grade 1 has only **20 training examples**.
-- Both models struggled substantially with grade 1.
-- Accuracy can vary considerably on a test set of this size.
-- Only one model architecture was studied.
-- The synthetic corruptions are simplified approximations of real image-quality degradation.
-- Improved robustness to one corruption does not necessarily imply robustness to other distribution shifts.
-
-These results therefore should not be interpreted as evidence of clinical performance.
+- only 413 original training images;
+- strong class imbalance;
+- only 20 grade-1 examples;
+- poor performance on grade 1;
+- a relatively small official test set;
+- one model architecture;
+- synthetic corruptions rather than naturally collected degraded medical images;
+- corruption-specific robustness gains that do not necessarily transfer to every distribution shift.
 
 ---
 
 ## Conclusion
 
-The baseline retinal classifier performed reasonably on clean images but was highly vulnerable to several forms of image degradation. Strong Gaussian blur and noise produced particularly severe failures.
+The baseline ResNet-18 classifier was highly sensitive to several kinds of image degradation, especially Gaussian noise and strong blur.
 
-Training with randomized corruption augmentation changed this behavior. Although clean accuracy decreased from **60.2% to 53.4%**, the robust model retained substantially more accuracy under several severe corruptions, including a **30.1-point improvement under Gaussian noise** and a **14.6-point improvement under strong blur**.
+Corruption-aware training preserved most clean-image performance while substantially improving robustness under several severe corruptions.
 
-The results illustrate that evaluating only clean accuracy can hide important model failure modes and that robustness interventions can involve meaningful tradeoffs rather than universally improving performance.
+The largest improvement occurred under Gaussian noise, where accuracy increased by **27.2 percentage points** at noise standard deviation 10.
+
+These results demonstrate that clean test accuracy alone can hide important failure modes and that robustness-oriented training can substantially reduce some of those failures without necessarily improving every operating condition.
