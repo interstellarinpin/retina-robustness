@@ -22,7 +22,6 @@ torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 
-
 train_csv = (
     "data/idrid/B. Disease Grading/"
     "2. Groundtruths/"
@@ -46,11 +45,6 @@ test_image_dir = (
     "1. Original Images/"
     "b. Testing Set"
 )
-
-
-# ============================================================
-# CROP BLACK BACKGROUND
-# ============================================================
 
 def crop_retina(image):
     """
@@ -294,7 +288,7 @@ model.fc = nn.Linear(
 )
 
 
-# Ordinary cross entropy because your current goal
+# Ordinary cross entropy because current goal
 # is overall classification accuracy.
 loss_fn = nn.CrossEntropyLoss()
 
