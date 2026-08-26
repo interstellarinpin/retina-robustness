@@ -10,11 +10,6 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from torchvision.models import resnet18
 
-
-# ============================================================
-# SETTINGS
-# ============================================================
-
 IMAGE_SIZE = 384
 BATCH_SIZE = 8
 SEED = 42
@@ -40,10 +35,6 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 
-# ============================================================
-# RETINA CROP
-# ============================================================
-
 def crop_retina(image):
 
     array = np.array(image)
@@ -52,13 +43,9 @@ def crop_retina(image):
 
     mask = gray > 10
 
-    rows = np.where(
-        mask.any(axis=1)
-    )[0]
+    rows = np.where(mask.any(axis=1))[0]
 
-    cols = np.where(
-        mask.any(axis=0)
-    )[0]
+    cols = np.where(mask.any(axis=0))[0]
 
     if (
         len(rows) == 0
@@ -75,10 +62,6 @@ def crop_retina(image):
         )
     )
 
-
-# ============================================================
-# GAUSSIAN NOISE
-# ============================================================
 
 def apply_gaussian_noise(
     image,
@@ -115,11 +98,6 @@ def apply_gaussian_noise(
         mode="RGB"
     )
 
-
-# ============================================================
-# JPEG COMPRESSION
-# ============================================================
-
 def apply_jpeg_compression(
     image,
     quality
@@ -147,11 +125,6 @@ def apply_jpeg_compression(
     buffer.close()
 
     return image
-
-
-# ============================================================
-# ROBUSTNESS DATASET
-# ============================================================
 
 class RobustnessDataset(Dataset):
 
@@ -232,9 +205,6 @@ class RobustnessDataset(Dataset):
             "RGB"
         )
 
-        # ----------------------------------------
-        # SAME BASIC PREPROCESSING
-        # ----------------------------------------
 
         image = crop_retina(
             image
@@ -247,9 +217,6 @@ class RobustnessDataset(Dataset):
             )
         )
 
-        # ----------------------------------------
-        # BLUR
-        # ----------------------------------------
 
         if self.blur_radius > 0:
 
@@ -259,10 +226,6 @@ class RobustnessDataset(Dataset):
                 )
             )
 
-        # ----------------------------------------
-        # BRIGHTNESS
-        # ----------------------------------------
-
         if self.brightness != 1.0:
 
             image = ImageEnhance.Brightness(
@@ -270,10 +233,6 @@ class RobustnessDataset(Dataset):
             ).enhance(
                 self.brightness
             )
-
-        # ----------------------------------------
-        # CONTRAST
-        # ----------------------------------------
 
         if self.contrast != 1.0:
 
@@ -283,9 +242,6 @@ class RobustnessDataset(Dataset):
                 self.contrast
             )
 
-        # ----------------------------------------
-        # GAUSSIAN NOISE
-        # ----------------------------------------
 
         if self.noise_std > 0:
 
@@ -298,9 +254,6 @@ class RobustnessDataset(Dataset):
                 seed=SEED + idx
             )
 
-        # ----------------------------------------
-        # JPEG
-        # ----------------------------------------
 
         if self.jpeg_quality < 100:
 
@@ -314,11 +267,6 @@ class RobustnessDataset(Dataset):
         )
 
         return image, label
-
-
-# ============================================================
-# LOAD MODEL
-# ============================================================
 
 def load_model(path):
 
@@ -351,10 +299,6 @@ robust_model = load_model(
     ROBUST_MODEL_PATH
 )
 
-
-# ============================================================
-# EVALUATE BOTH MODELS ON SAME IMAGES
-# ============================================================
 
 def evaluate_both(
     blur_radius=0,
@@ -427,10 +371,6 @@ def evaluate_both(
     )
 
 
-# ============================================================
-# PRINT TABLE
-# ============================================================
-
 def print_table(
     title,
     levels,
@@ -482,10 +422,6 @@ def print_table(
         )
 
 
-# ============================================================
-# CLEAN
-# ============================================================
-
 baseline_clean, robust_clean = (
     evaluate_both()
 )
@@ -519,10 +455,6 @@ print(
 )
 
 
-# ============================================================
-# GAUSSIAN BLUR
-# ============================================================
-
 print_table(
 
     "GAUSSIAN BLUR",
@@ -541,10 +473,6 @@ print_table(
     )
 )
 
-
-# ============================================================
-# BRIGHTNESS
-# ============================================================
 
 print_table(
 
@@ -566,10 +494,6 @@ print_table(
 )
 
 
-# ============================================================
-# CONTRAST
-# ============================================================
-
 print_table(
 
     "CONTRAST",
@@ -589,10 +513,6 @@ print_table(
     )
 )
 
-
-# ============================================================
-# GAUSSIAN NOISE
-# ============================================================
 
 print_table(
 
