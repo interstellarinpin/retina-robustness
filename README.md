@@ -218,13 +218,14 @@ retina-robustness/
 ├── dataset.py
 ├── train_robust.py
 ├── robustness.py
-├── results.txt
-├── figures/
-│   ├── gaussian_blur_robustness.png
-│   ├── gaussian_noise_robustness.png
-│   └── jpeg_compression_robustness.png
-└── README.md
-```
+├── README.md
+├── requirements.txt
+├── results/
+│   └── robustness_results.txt
+└── figures/
+    ├── gaussian_blur_robustness.png
+    ├── gaussian_noise_robustness.png
+    └── jpeg_compression_robustness.png
 
 - `dataset.py` trains the baseline classifier and saves `best_model.pth`.
 - `train_robust.py` trains the corruption-aware classifier and saves `best_robust_model.pth`.
