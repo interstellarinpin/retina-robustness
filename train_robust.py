@@ -12,10 +12,6 @@ from torchvision import transforms
 from torchvision.models import resnet18, ResNet18_Weights
 
 
-# ============================================================
-# SETTINGS
-# ============================================================
-
 SEED = 42
 BATCH_SIZE = 8
 IMAGE_SIZE = 384
@@ -52,11 +48,6 @@ test_image_dir = (
     "b. Testing Set"
 )
 
-
-# ============================================================
-# CROP BLACK BACKGROUND
-# ============================================================
-
 def crop_retina(image):
     array = np.array(image)
 
@@ -78,11 +69,6 @@ def crop_retina(image):
     return image.crop(
         (left, top, right + 1, bottom + 1)
     )
-
-
-# ============================================================
-# RANDOM GAUSSIAN NOISE
-# ============================================================
 
 class RandomGaussianNoise:
     def __init__(
@@ -126,11 +112,6 @@ class RandomGaussianNoise:
             mode="RGB"
         )
 
-
-# ============================================================
-# RANDOM JPEG COMPRESSION
-# ============================================================
-
 class RandomJPEGCompression:
     def __init__(
         self,
@@ -169,11 +150,6 @@ class RandomJPEGCompression:
 
         return compressed
 
-
-# ============================================================
-# RANDOM GAUSSIAN BLUR
-# ============================================================
-
 class RandomGaussianBlur:
     def __init__(
         self,
@@ -197,12 +173,7 @@ class RandomGaussianBlur:
                 radius=radius
             )
         )
-
-
-# ============================================================
-# DATASET
-# ============================================================
-
+    
 class IDRiDDataset(Dataset):
     def __init__(
         self,
@@ -244,11 +215,6 @@ class IDRiDDataset(Dataset):
             image = self.transform(image)
 
         return image, label
-
-
-# ============================================================
-# TRANSFORMS
-# ============================================================
 
 train_transform = transforms.Compose([
 
@@ -311,10 +277,6 @@ evaluation_transform = transforms.Compose([
     )
 ])
 
-
-# ============================================================
-# TRAIN / VALIDATION SPLIT
-# ============================================================
 
 all_train_labels = pd.read_csv(
     train_csv
@@ -409,11 +371,6 @@ test_dataframe = pd.read_csv(
     test_csv
 )
 
-
-# ============================================================
-# DATASETS
-# ============================================================
-
 train_dataset = IDRiDDataset(
     train_dataframe,
     train_image_dir,
@@ -431,11 +388,6 @@ test_dataset = IDRiDDataset(
     test_image_dir,
     transform=evaluation_transform
 )
-
-
-# ============================================================
-# DATALOADERS
-# ============================================================
 
 train_dataloader = DataLoader(
     train_dataset,
@@ -456,10 +408,6 @@ test_dataloader = DataLoader(
 )
 
 
-# ============================================================
-# MODEL
-# ============================================================
-
 weights = ResNet18_Weights.DEFAULT
 
 model = resnet18(
@@ -472,10 +420,6 @@ model.fc = nn.Linear(
 )
 
 
-# ============================================================
-# LOSS + OPTIMIZER
-# ============================================================
-
 loss_fn = nn.CrossEntropyLoss()
 
 optimizer = torch.optim.AdamW(
@@ -483,11 +427,6 @@ optimizer = torch.optim.AdamW(
     lr=LEARNING_RATE,
     weight_decay=1e-4
 )
-
-
-# ============================================================
-# TRAIN
-# ============================================================
 
 def train(
     dataloader,
@@ -538,11 +477,6 @@ def train(
     )
 
     return average_loss, accuracy
-
-
-# ============================================================
-# EVALUATE
-# ============================================================
 
 def evaluate(
     dataloader,
@@ -608,11 +542,6 @@ def evaluate(
         accuracy,
         confusion
     )
-
-
-# ============================================================
-# TRAINING LOOP
-# ============================================================
 
 best_validation_accuracy = 0
 
@@ -682,11 +611,6 @@ for epoch in range(EPOCHS):
             "Saved new best robust model."
         )
 
-
-# ============================================================
-# LOAD BEST ROBUST MODEL
-# ============================================================
-
 model.load_state_dict(
     torch.load(
         best_model_path,
@@ -710,11 +634,6 @@ print(
 print(
     f"{100 * best_validation_accuracy:.1f}%"
 )
-
-
-# ============================================================
-# CLEAN TEST EVALUATION
-# ============================================================
 
 (
     test_loss,
