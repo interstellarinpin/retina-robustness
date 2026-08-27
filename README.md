@@ -231,7 +231,6 @@ The experiment also shows that robustness training is not universally beneficial
 
 ## Project Structure
 
-```text
 retina-robustness/
 ├── dataset.py
 ├── train_robust.py
@@ -245,11 +244,11 @@ retina-robustness/
     ├── gaussian_noise_robustness.png
     └── jpeg_compression_robustness.png
 
-- dataset.py trains the baseline classifier and saves best_model.pth.
-- train_robust.py trains the corruption-aware classifier and saves best_robust_model.pth.
-- robustness.py loads both fixed models and evaluates them under identical corruption conditions.
-- results/robustness_results.txt stores the final numerical results.
-- figures/ contains visualizations of the major robustness experiments.
+- `dataset.py` trains the baseline classifier and saves best_model.pth.
+- `train_robust.py` trains the corruption-aware classifier and saves `best_robust_model.pth`.
+- `robustness.py` loads both fixed models and evaluates them under identical corruption conditions.
+- `results/robustness_results.txt` stores the final numerical results.
+- `figures/` contains visualizations of the major robustness experiments.
 
 The IDRiD image data and trained model checkpoints are excluded from version control.
 
@@ -278,6 +277,6 @@ The baseline ResNet-18 classifier was highly sensitive to several kinds of image
 
 Corruption-aware training preserved most clean-image performance while substantially improving robustness under several severe corruptions.
 
-The largest improvement occurred under Gaussian noise, where accuracy increased by 27.2 percentage points at noise standard deviation 10.
+The largest improvement occurred under Gaussian noise, where accuracy increased by **27.2 percentage points** at noise standard deviation 10.
 
 These results demonstrate that clean test accuracy alone can hide important failure modes and that robustness-oriented training can substantially reduce some of those failures without necessarily improving every operating condition.
