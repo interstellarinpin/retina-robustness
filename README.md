@@ -231,6 +231,7 @@ The experiment also shows that robustness training is not universally beneficial
 
 ## Project Structure
 
+```text
 retina-robustness/
 ├── dataset.py
 ├── train_robust.py
@@ -243,6 +244,7 @@ retina-robustness/
     ├── gaussian_blur_robustness.png
     ├── gaussian_noise_robustness.png
     └── jpeg_compression_robustness.png
+```
 
 - `dataset.py` trains the baseline classifier and saves best_model.pth.
 - `train_robust.py` trains the corruption-aware classifier and saves `best_robust_model.pth`.
