@@ -19,6 +19,24 @@ The final experiment evaluates both fixed models on exactly the same corrupted v
 
 ---
 
+## Video Walkthrough
+
+I created a complete video walkthrough of the project covering the motivation, experimental design, implementation, robustness testing, and final results.
+
+### Full Project Playlist
+
+[Watch the complete project walkthrough on YouTube](https://www.youtube.com/playlist?list=PLNgnEuulhlis)
+
+The video series includes:
+
+1. **Project Introduction** — motivation, research question, dataset, and experimental design
+2. **Baseline Model (`dataset.py`)** — preprocessing, ResNet-18 training, validation, and evaluation
+3. **Corruption-Aware Training (`train_robust.py`)** — Gaussian noise, blur, JPEG compression, and robust training
+4. **Robustness Evaluation (`robustness.py`)** — controlled comparison of the baseline and robust models
+5. **Results and Conclusion** — robustness gains, tradeoffs, limitations, and conclusions
+
+---
+
 ## Dataset
 
 The project uses the **IDRiD disease-grading dataset**.
@@ -230,7 +248,7 @@ retina-robustness/
 - `dataset.py` trains the baseline classifier and saves `best_model.pth`.
 - `train_robust.py` trains the corruption-aware classifier and saves `best_robust_model.pth`.
 - `robustness.py` loads both fixed models and evaluates them under identical corruption conditions.
-- `results.txt` stores the final numerical results.
+- `results/robustness_results.txt` stores the final numerical results.
 - `figures/` contains visualizations of the major robustness experiments.
 
 The IDRiD image data and trained model checkpoints are excluded from version control.
