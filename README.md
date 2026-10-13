@@ -53,7 +53,9 @@ The original training set contains 413 retinal fundus images across five diabeti
 
 The dataset is strongly imbalanced, particularly for grade 1.
 
-The official training data is divided into a stratified training and validation split, while the official IDRiD test set is reserved for final evaluation.
+The official training data is divided into a stratified training and validation split, while the official IDRiD test set (103 images) is reserved for final evaluation.
+
+Because the test set has 103 images, each image is worth about **0.97 percentage points** of accuracy.
 
 ---
 
@@ -91,6 +93,8 @@ The baseline training pipeline uses mild augmentation:
 The selected baseline model achieved:
 
 **55.3% clean test accuracy**
+
+For reference, always predicting the most common test grade (grade 0, 34 of 103 images) would give **33.0%**.
 
 ---
 
@@ -138,6 +142,8 @@ At blur radius 4, corruption-aware training improves accuracy from **15.5% to 31
 
 ![Gaussian noise robustness](figures/gaussian_noise_robustness.png)
 
+Noise is added to pixel values on the 0–255 scale.
+
 | Noise Std. | Baseline | Robust | Change |
 |---:|---:|---:|---:|
 | 0 | 55.3% | 53.4% | -1.9 |
@@ -174,6 +180,8 @@ The corruption-trained model improves robustness to moderate and heavy JPEG comp
 
 ## Brightness
 
+![Brightness robustness](figures/brightness_robustness.png)
+
 | Brightness Factor | Baseline | Robust | Change |
 |---:|---:|---:|---:|
 | 0.25 | 38.8% | 54.4% | **+15.5** |
@@ -189,6 +197,8 @@ The largest brightness improvement occurs for very dark images.
 ---
 
 ## Contrast
+
+![Contrast robustness](figures/contrast_robustness.png)
 
 | Contrast Factor | Baseline | Robust | Change |
 |---:|---:|---:|---:|
@@ -241,6 +251,8 @@ retina-robustness/
 ├── results/
 │   └── robustness_results.txt
 └── figures/
+    ├── brightness_robustness.png
+    ├── contrast_robustness.png
     ├── gaussian_blur_robustness.png
     ├── gaussian_noise_robustness.png
     └── jpeg_compression_robustness.png
@@ -266,7 +278,8 @@ Important limitations include:
 - strong class imbalance;
 - only 20 grade-1 examples;
 - poor performance on grade 1;
-- a relatively small official test set;
+- a relatively small official test set (103 images), so differences of about 1 point correspond to a single image;
+- a single training run per model (seed 42), so run-to-run variance is not measured;
 - one model architecture;
 - synthetic corruptions rather than naturally collected degraded medical images;
 - corruption-specific robustness gains that do not necessarily transfer to every distribution shift.
