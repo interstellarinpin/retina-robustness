@@ -210,11 +210,14 @@ class RobustnessDataset(Dataset):
             image
         )
 
+        # Bilinear to match transforms.Resize
+        # used during training.
         image = image.resize(
             (
                 IMAGE_SIZE,
                 IMAGE_SIZE
-            )
+            ),
+            Image.BILINEAR
         )
 
 

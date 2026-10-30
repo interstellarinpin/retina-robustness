@@ -92,7 +92,7 @@ The baseline training pipeline uses mild augmentation:
 
 The selected baseline model achieved:
 
-**55.3% clean test accuracy**
+**54.4% clean test accuracy**
 
 For reference, always predicting the most common test grade (grade 0, 34 of 103 images) would give **33.0%**.
 
@@ -111,9 +111,9 @@ The purpose is to encourage the network to learn features that remain useful whe
 
 Its clean test accuracy was:
 
-**53.4%**
+**51.5%**
 
-This is only **1.9 percentage points lower** than the baseline.
+This is only **2.9 percentage points lower** than the baseline.
 
 ---
 
@@ -125,16 +125,16 @@ This is only **1.9 percentage points lower** than the baseline.
 
 | Blur Radius | Baseline | Robust | Change |
 |---:|---:|---:|---:|
-| 0 | 55.3% | 53.4% | -1.9 |
-| 0.5 | 53.4% | 53.4% | 0.0 |
-| 1 | 47.6% | 48.5% | +1.0 |
-| 2 | 41.7% | 50.5% | +8.7 |
-| 4 | 15.5% | 31.1% | **+15.5** |
-| 8 | 13.6% | 17.5% | +3.9 |
+| 0 | 54.4% | 51.5% | -2.9 |
+| 0.5 | 56.3% | 51.5% | -4.9 |
+| 1 | 48.5% | 48.5% | 0.0 |
+| 2 | 43.7% | 50.5% | +6.8 |
+| 4 | 14.6% | 31.1% | **+16.5** |
+| 8 | 13.6% | 18.4% | +4.9 |
 
 The baseline model becomes highly sensitive to stronger blur.
 
-At blur radius 4, corruption-aware training improves accuracy from **15.5% to 31.1%**.
+At blur radius 4, corruption-aware training improves accuracy from **14.6% to 31.1%**.
 
 ---
 
@@ -146,18 +146,18 @@ Noise is added to pixel values on the 0–255 scale.
 
 | Noise Std. | Baseline | Robust | Change |
 |---:|---:|---:|---:|
-| 0 | 55.3% | 53.4% | -1.9 |
-| 5 | 47.6% | 55.3% | +7.8 |
-| 10 | 23.3% | 50.5% | **+27.2** |
-| 20 | 16.5% | 42.7% | **+26.2** |
-| 30 | 17.5% | 34.0% | +16.5 |
-| 50 | 12.6% | 21.4% | +8.7 |
+| 0 | 54.4% | 51.5% | -2.9 |
+| 5 | 45.6% | 53.4% | +7.8 |
+| 10 | 20.4% | 47.6% | **+27.2** |
+| 20 | 17.5% | 41.7% | **+24.3** |
+| 30 | 16.5% | 35.0% | +18.4 |
+| 50 | 12.6% | 20.4% | +7.8 |
 
 Gaussian noise produced the strongest robustness gains.
 
-At noise standard deviation 10, the robust model improves from **23.3% to 50.5%**.
+At noise standard deviation 10, the robust model improves from **20.4% to 47.6%**.
 
-At standard deviation 20, accuracy improves from **16.5% to 42.7%**.
+At standard deviation 20, accuracy improves from **17.5% to 41.7%**.
 
 ---
 
@@ -167,11 +167,11 @@ At standard deviation 20, accuracy improves from **16.5% to 42.7%**.
 
 | JPEG Quality | Baseline | Robust | Change |
 |---:|---:|---:|---:|
-| 100 | 55.3% | 53.4% | -1.9 |
-| 90 | 58.3% | 58.3% | 0.0 |
-| 70 | 48.5% | 53.4% | +4.9 |
-| 50 | 44.7% | 53.4% | +8.7 |
-| 30 | 40.8% | 49.5% | +8.7 |
+| 100 | 54.4% | 51.5% | -2.9 |
+| 90 | 53.4% | 54.4% | +1.0 |
+| 70 | 49.5% | 56.3% | +6.8 |
+| 50 | 45.6% | 55.3% | +9.7 |
+| 30 | 41.7% | 48.5% | +6.8 |
 | 10 | 18.4% | 12.6% | -5.8 |
 
 The corruption-trained model improves robustness to moderate and heavy JPEG compression, although extremely severe compression remains difficult.
@@ -184,13 +184,13 @@ The corruption-trained model improves robustness to moderate and heavy JPEG comp
 
 | Brightness Factor | Baseline | Robust | Change |
 |---:|---:|---:|---:|
-| 0.25 | 38.8% | 54.4% | **+15.5** |
-| 0.50 | 54.4% | 55.3% | +1.0 |
-| 0.75 | 57.3% | 56.3% | -1.0 |
-| 1.00 | 55.3% | 53.4% | -1.9 |
-| 1.25 | 55.3% | 56.3% | +1.0 |
-| 1.50 | 53.4% | 51.5% | -1.9 |
-| 1.75 | 47.6% | 48.5% | +1.0 |
+| 0.25 | 39.8% | 54.4% | **+14.6** |
+| 0.50 | 53.4% | 56.3% | +2.9 |
+| 0.75 | 56.3% | 53.4% | -2.9 |
+| 1.00 | 54.4% | 51.5% | -2.9 |
+| 1.25 | 53.4% | 53.4% | 0.0 |
+| 1.50 | 50.5% | 48.5% | -1.9 |
+| 1.75 | 45.6% | 48.5% | +2.9 |
 
 The largest brightness improvement occurs for very dark images.
 
@@ -202,13 +202,13 @@ The largest brightness improvement occurs for very dark images.
 
 | Contrast Factor | Baseline | Robust | Change |
 |---:|---:|---:|---:|
-| 0.25 | 43.7% | 58.3% | **+14.6** |
-| 0.50 | 53.4% | 54.4% | +1.0 |
-| 0.75 | 54.4% | 57.3% | +2.9 |
-| 1.00 | 55.3% | 53.4% | -1.9 |
-| 1.25 | 54.4% | 53.4% | -1.0 |
-| 1.50 | 57.3% | 49.5% | -7.8 |
-| 2.00 | 53.4% | 43.7% | -9.7 |
+| 0.25 | 44.7% | 55.3% | **+10.7** |
+| 0.50 | 49.5% | 52.4% | +2.9 |
+| 0.75 | 52.4% | 56.3% | +3.9 |
+| 1.00 | 54.4% | 51.5% | -2.9 |
+| 1.25 | 53.4% | 50.5% | -2.9 |
+| 1.50 | 55.3% | 45.6% | -9.7 |
+| 2.00 | 51.5% | 41.7% | -9.7 |
 
 The robust model improves performance under low contrast but performs worse under unusually high contrast.
 
@@ -220,18 +220,18 @@ Corruption-aware training produced a favorable but non-universal robustness trad
 
 Clean accuracy changed only slightly:
 
-**55.3% → 53.4% (-1.9 points)**
+**54.4% → 51.5% (-2.9 points)**
 
 while several degraded conditions improved substantially:
 
 | Condition | Baseline | Robust | Improvement |
 |---|---:|---:|---:|
-| Noise std 10 | 23.3% | 50.5% | **+27.2** |
-| Noise std 20 | 16.5% | 42.7% | **+26.2** |
-| Blur radius 4 | 15.5% | 31.1% | **+15.5** |
-| Brightness 0.25 | 38.8% | 54.4% | **+15.5** |
-| Contrast 0.25 | 43.7% | 58.3% | **+14.6** |
-| JPEG quality 30 | 40.8% | 49.5% | **+8.7** |
+| Noise std 10 | 20.4% | 47.6% | **+27.2** |
+| Noise std 20 | 17.5% | 41.7% | **+24.3** |
+| Blur radius 4 | 14.6% | 31.1% | **+16.5** |
+| Brightness 0.25 | 39.8% | 54.4% | **+14.6** |
+| Contrast 0.25 | 44.7% | 55.3% | **+10.7** |
+| JPEG quality 50 | 45.6% | 55.3% | **+9.7** |
 
 The strongest gains occurred under Gaussian noise.
 
